@@ -8,17 +8,35 @@ from typing import Optional, List
 import random
 import json
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import os
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from database import init_db, get_connection
 
 app = FastAPI(title="NeuroSync API", version="0.1.0")
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+API_KEY = os.environ.get("API_KEY", "")
+
+def require_api_key(x_api_key: str = Header(default="")):
+    if API_KEY and x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+ALLOWED_ORIGINS = os.environ.get(
+    "ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -74,8 +92,9 @@ class SessionSummary(BaseModel):
     total_minutes: float
 
 
-@app.post("/api/readings")
-async def post_reading(reading: Reading):
+@app.post("/api/readings", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
+async def post_reading(request: Request, reading: Reading):
     ts = reading.timestamp or datetime.utcnow().isoformat()
     conn = get_connection()
     conn.execute(
@@ -97,7 +116,8 @@ async def post_reading(reading: Reading):
 
 
 @app.get("/api/readings/recent")
-def recent_readings(minutes: int = 30):
+@limiter.limit("120/minute")
+def recent_readings(request: Request, minutes: int = 30):
     since = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
     conn = get_connection()
     rows = conn.execute(
@@ -108,7 +128,8 @@ def recent_readings(minutes: int = 30):
 
 
 @app.get("/api/stats/today")
-def stats_today():
+@limiter.limit("120/minute")
+def stats_today(request: Request):
     since = datetime.utcnow().strftime("%Y-%m-%d")
     conn = get_connection()
     rows = conn.execute("SELECT * FROM readings WHERE timestamp >= ?", (since,)).fetchall()
@@ -127,7 +148,8 @@ def stats_today():
 
 
 @app.get("/api/stats/hourly")
-def stats_hourly():
+@limiter.limit("120/minute")
+def stats_hourly(request: Request):
     conn = get_connection()
     rows = conn.execute(
         """SELECT substr(timestamp, 1, 13) as hour, AVG(focus_score) as avg_score
@@ -138,7 +160,8 @@ def stats_hourly():
 
 
 @app.post("/api/simulate/seed")
-def seed_simulated_data(hours: int = 3):
+@limiter.limit("5/hour")
+def seed_simulated_data(request: Request, hours: int = 3):
     conn = get_connection()
     now = datetime.utcnow()
     apps = ["VS Code", "Docs", "Terminal", "YouTube", "Instagram", "Slack"]
@@ -168,7 +191,8 @@ def seed_simulated_data(hours: int = 3):
 
 
 @app.get("/api/stats/daily")
-def stats_daily(days: int = 7):
+@limiter.limit("120/minute")
+def stats_daily(request: Request, days: int = 7):
     since = (datetime.utcnow() - timedelta(days=days)).isoformat()
     conn = get_connection()
     rows = conn.execute(
@@ -185,7 +209,8 @@ def stats_daily(days: int = 7):
 
 
 @app.get("/api/readings/table")
-def readings_table(limit: int = 50):
+@limiter.limit("120/minute")
+def readings_table(request: Request, limit: int = 50):
     conn = get_connection()
     rows = conn.execute(
         "SELECT * FROM readings ORDER BY timestamp DESC LIMIT ?", (limit,)
@@ -201,7 +226,8 @@ DEFAULT_BLOCKLIST = [
 
 
 @app.get("/api/blocklist")
-def get_blocklist():
+@limiter.limit("120/minute")
+def get_blocklist(request: Request):
     conn = get_connection()
     row = conn.execute("SELECT value FROM settings WHERE key = 'blocklist'").fetchone()
     conn.close()
@@ -210,8 +236,9 @@ def get_blocklist():
     return {"blocklist": DEFAULT_BLOCKLIST}
 
 
-@app.put("/api/blocklist")
-def put_blocklist(payload: BlocklistPayload):
+@app.put("/api/blocklist", dependencies=[Depends(require_api_key)])
+@limiter.limit("10/hour")
+def put_blocklist(request: Request, payload: BlocklistPayload):
     conn = get_connection()
     conn.execute(
         "INSERT INTO settings (key, value) VALUES ('blocklist', ?) "
