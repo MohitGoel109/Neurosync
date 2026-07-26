@@ -1,0 +1,12 @@
+/* Zen Circuit — calm, minimal counterpoint to Cognitive Radar. */
+[data-theme='zen-circuit'] {
+  --bg: #f4f1ea;
+  --panel: #ffffff;
+  --panel-border: #e2ddd0;
+  --trace: #2f6f6a;
+  --trace-dim: #b9cfc9;
+  --alert: #c0603f;
+  --accent-amber: #c99a3d;
+  --text: #2b2b26;
+  --text-dim: #8a8578;
+}

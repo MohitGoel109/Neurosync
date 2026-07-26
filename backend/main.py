@@ -1,0 +1,223 @@
+"""
+NeuroSync Backend — FastAPI service
+Receives telemetry from the local sensing agent, stores it in SQLite,
+and serves aggregated data to the React dashboard.
+"""
+from datetime import datetime, timedelta
+from typing import Optional, List
+import random
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from database import init_db, get_connection
+
+app = FastAPI(title="NeuroSync API", version="0.1.0")
+
+# Dashboard runs on a different port during dev — allow local origins only.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+init_db()
+
+# ---------------------------------------------------------------------------
+# Live dashboard subscribers (WebSocket) — pushed to whenever the agent posts
+# a new reading, so the radar sweep / focus ring update without polling.
+# ---------------------------------------------------------------------------
+subscribers: List[WebSocket] = []
+
+
+async def broadcast(payload: dict):
+    dead = []
+    for ws in subscribers:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        subscribers.remove(ws)
+
+
+@app.websocket("/ws/live")
+async def live_feed(websocket: WebSocket):
+    await websocket.accept()
+    subscribers.append(websocket)
+    try:
+        while True:
+            # Keep the socket open; agent -> backend -> browser is push-only.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        subscribers.remove(websocket)
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+class Reading(BaseModel):
+    timestamp: Optional[str] = None
+    attention: bool  # True = looking at screen
+    typing_speed_wpm: float = 0.0
+    idle_seconds: float = 0.0
+    mouse_events: int = 0
+    active_app: str = "unknown"
+    is_distraction: bool = False
+    focus_score: float
+
+
+class SessionSummary(BaseModel):
+    session_id: int
+    started_at: str
+    avg_focus_score: float
+    distraction_pct: float
+    total_minutes: float
+
+
+# ---------------------------------------------------------------------------
+# Ingestion — the sensing agent POSTs one reading roughly every few seconds
+# ---------------------------------------------------------------------------
+@app.post("/api/readings")
+async def post_reading(reading: Reading):
+    ts = reading.timestamp or datetime.utcnow().isoformat()
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO readings
+           (timestamp, attention, typing_speed_wpm, idle_seconds, mouse_events,
+            active_app, is_distraction, focus_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            ts,
+            int(reading.attention),
+            reading.typing_speed_wpm,
+            reading.idle_seconds,
+            reading.mouse_events,
+            reading.active_app,
+            int(reading.is_distraction),
+            reading.focus_score,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    await broadcast(reading.model_dump() | {"timestamp": ts})
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard reads
+# ---------------------------------------------------------------------------
+@app.get("/api/readings/recent")
+def recent_readings(minutes: int = 30):
+    since = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM readings WHERE timestamp >= ? ORDER BY timestamp ASC",
+        (since,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/stats/today")
+def stats_today():
+    since = datetime.utcnow().strftime("%Y-%m-%d")
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM readings WHERE timestamp >= ?", (since,)
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        return {"avg_focus_score": 0, "distraction_pct": 0, "total_readings": 0}
+
+    scores = [r["focus_score"] for r in rows]
+    distractions = [r["is_distraction"] for r in rows]
+    return {
+        "avg_focus_score": round(sum(scores) / len(scores), 1),
+        "distraction_pct": round(100 * sum(distractions) / len(distractions), 1),
+        "total_readings": len(rows),
+    }
+
+
+@app.get("/api/stats/hourly")
+def stats_hourly():
+    """Focus score bucketed by hour, for the timeline chart."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT substr(timestamp, 1, 13) as hour, AVG(focus_score) as avg_score
+           FROM readings GROUP BY hour ORDER BY hour ASC"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Demo fallback — generates realistic simulated readings so the dashboard
+# has something impressive to show even if the webcam/demo machine misbehaves.
+# ---------------------------------------------------------------------------
+@app.post("/api/simulate/seed")
+def seed_simulated_data(hours: int = 3):
+    conn = get_connection()
+    now = datetime.utcnow()
+    apps = ["VS Code", "Docs", "Terminal", "YouTube", "Instagram", "Slack"]
+    distracting = {"YouTube", "Instagram"}
+
+    for i in range(hours * 60):  # one reading per simulated minute
+        ts = (now - timedelta(minutes=hours * 60 - i)).isoformat()
+        app_choice = random.choices(apps, weights=[30, 15, 15, 10, 8, 12])[0]
+        is_distraction = app_choice in distracting
+        attention = random.random() > (0.35 if is_distraction else 0.1)
+        base = 40 if is_distraction else 75
+        score = max(0, min(100, base + random.gauss(0, 12)))
+        conn.execute(
+            """INSERT INTO readings
+               (timestamp, attention, typing_speed_wpm, idle_seconds, mouse_events,
+                active_app, is_distraction, focus_score)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                ts,
+                int(attention),
+                round(random.uniform(20, 70), 1),
+                round(random.uniform(0, 45), 1),
+                random.randint(0, 40),
+                app_choice,
+                int(is_distraction),
+                round(score, 1),
+            ),
+        )
+    conn.commit()
+    conn.close()
+    return {"status": "seeded", "readings": hours * 60}
+
+@app.get("/api/stats/daily")
+def stats_daily(days: int = 7):
+    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT substr(timestamp, 1, 10) as day,
+                  AVG(focus_score) as avg_score,
+                  SUM(is_distraction) * 1.0 / COUNT(*) * 100 as distraction_pct,
+                  COUNT(*) as readings
+           FROM readings WHERE timestamp >= ?
+           GROUP BY day ORDER BY day ASC""",
+        (since,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/readings/table")
+def readings_table(limit: int = 50):
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM readings ORDER BY timestamp DESC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+@app.get("/health")
+def health():
+    return {"status": "ok"}

@@ -1,0 +1,64 @@
+@import './themes/cognitive-radar.css';
+@import './themes/zen-circuit.css';
+@import './themes/neural-garden.css';
+@import './themes/mission-control.css';
+@import './themes/synthwave-grid.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', ui-sans-serif, system-ui;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* Respect reduced-motion preferences — the radar sweep and pulse
+   animations pause instead of spinning indefinitely. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+}
+
+:focus-visible {
+  outline: 2px solid var(--trace);
+  outline-offset: 2px;
+}
+
+/* Shared panel styling for visual polish across the app */
+.ns-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.ns-panel:hover {
+  border-color: var(--trace-dim);
+}
+
+.ns-glow-text {
+  text-shadow: 0 0 12px color-mix(in srgb, var(--trace) 40%, transparent);
+}
+
+.ns-nav-link {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.375rem;
+  color: var(--text-dim);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.ns-nav-link:hover {
+  color: var(--text);
+}
+.ns-nav-link.active {
+  color: var(--bg);
+  background: var(--trace);
+  border-color: var(--trace);
+}

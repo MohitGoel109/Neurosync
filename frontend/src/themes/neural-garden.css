@@ -1,0 +1,12 @@
+/* Neural Garden — attention as growth; warm, organic counterpoint to the HUD themes. */
+[data-theme='neural-garden'] {
+  --bg: #0f1710;
+  --panel: #16221a;
+  --panel-border: #24352a;
+  --trace: #6fcb6b;
+  --trace-dim: #2f4a31;
+  --alert: #e0785a;
+  --accent-amber: #d9b25a;
+  --text: #dce8d9;
+  --text-dim: #7c9678;
+}

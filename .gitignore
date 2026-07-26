@@ -1,0 +1,34 @@
+# --- Python (agent + backend) ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# --- Generated data / local config (should not be in the repo) ---
+backend/neurosync.db
+backend/*.db
+backend/*.db-journal
+agent/distraction_config.json
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+npm-debug.log*
+
+# --- Environment / secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

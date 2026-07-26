@@ -1,0 +1,12 @@
+/* Synthwave Grid — neon outrun; the most visually dramatic option. */
+[data-theme='synthwave-grid'] {
+  --bg: #120318;
+  --panel: #1d0a2b;
+  --panel-border: #3a1550;
+  --trace: #ff2e9a;
+  --trace-dim: #5c1e63;
+  --alert: #ff5f5f;
+  --accent-amber: #00f0ff;
+  --text: #f5e8ff;
+  --text-dim: #a57fc2;
+}

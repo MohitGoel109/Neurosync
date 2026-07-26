@@ -1,0 +1,12 @@
+/* Mission Control — amber phosphor cockpit telemetry aesthetic. */
+[data-theme='mission-control'] {
+  --bg: #0a0a08;
+  --panel: #14140f;
+  --panel-border: #2a2a1e;
+  --trace: #ffb000;
+  --trace-dim: #4d3a10;
+  --alert: #ff3b30;
+  --accent-amber: #ffd54a;
+  --text: #f0e6c8;
+  --text-dim: #8a7f5c;
+}

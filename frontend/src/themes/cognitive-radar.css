@@ -1,0 +1,18 @@
+/*
+  Cognitive Radar — naval-sonar-inspired instrument panel.
+  Deliberately teal/coral/amber rather than the generic
+  acid-green-on-black "hacker HUD" look, to read as a real
+  instrument rather than a movie prop.
+*/
+:root,
+[data-theme='cognitive-radar'] {
+  --bg: #05080c;
+  --panel: #0d1520;
+  --panel-border: #16232b;
+  --trace: #4fd8c4;       /* primary sweep / live data */
+  --trace-dim: #1f5c56;   /* faded trail, gridlines */
+  --alert: #ff6b4a;       /* distraction pings */
+  --accent-amber: #f2c14e; /* focus score ring highlight */
+  --text: #c8d6d3;
+  --text-dim: #6b8783;
+}
