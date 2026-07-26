@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import RadarSweep from './components/RadarSweep'
+import RadarLegend from './components/RadarLegend'
 import FocusRing from './components/FocusRing'
 import FocusTimeline from './components/FocusTimeline'
 import AlertToast from './components/AlertToast'
@@ -9,6 +10,7 @@ import SettingsView from './components/SettingsView'
 import SessionTimer from './components/SessionTimer'
 import PomodoroTimer from './components/PomodoroTimer'
 import FocusStreakBadge from './components/FocusStreakBadge'
+import BrowserTrackerPanel from './components/BrowserTrackerPanel'
 import CursorEffect from './components/CursorEffect'
 import { useLiveFocus, seedSimulatedData } from './useLiveFocus'
 
@@ -150,10 +152,12 @@ export default function App() {
           <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <section className="lg:col-span-1 ns-panel p-6 flex flex-col items-center gap-6">
               <RadarSweep focusScore={focusScore} distractionPings={pings} />
+              <RadarLegend />
               <FocusRing score={focusScore} breakdown={breakdown} />
             </section>
 
             <section className="lg:col-span-2 flex flex-col gap-6">
+              <BrowserTrackerPanel />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard label="Focus score" value={focusScore} sublabel="live" />
                 <StatCard label="Distraction pings" value={pings.length} sublabel="last few minutes" />

@@ -92,9 +92,7 @@ class SessionSummary(BaseModel):
     total_minutes: float
 
 
-@app.post("/api/readings", dependencies=[Depends(require_api_key)])
-@limiter.limit("60/minute")
-async def post_reading(request: Request, reading: Reading):
+async def _insert_and_broadcast(reading: Reading, source: str):
     ts = reading.timestamp or datetime.utcnow().isoformat()
     conn = get_connection()
     conn.execute(
@@ -103,15 +101,37 @@ async def post_reading(request: Request, reading: Reading):
             active_app, is_distraction, focus_score)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            ts, int(reading.attention), reading.typing_speed_wpm, reading.idle_seconds,
-            reading.mouse_events, reading.active_app, int(reading.is_distraction),
+            ts,
+            int(reading.attention),
+            reading.typing_speed_wpm,
+            reading.idle_seconds,
+            reading.mouse_events,
+            reading.active_app,
+            int(reading.is_distraction),
             reading.focus_score,
         ),
     )
     conn.commit()
     conn.close()
+    await broadcast(reading.model_dump() | {"timestamp": ts, "source": source})
 
-    await broadcast(reading.model_dump() | {"timestamp": ts})
+
+@app.post("/api/readings", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
+async def post_reading(request: Request, reading: Reading):
+    """For the local Python sensing agent — requires API_KEY, since the
+    agent's key lives in a local env var and never ships in a public bundle."""
+    await _insert_and_broadcast(reading, source="agent")
+    return {"status": "ok"}
+
+
+@app.post("/api/readings/browser")
+@limiter.limit("40/minute")
+async def post_browser_reading(request: Request, reading: Reading):
+    """For in-browser tracking (no install) — intentionally has no API-key
+    requirement, since any 'secret' baked into a public frontend bundle
+    isn't actually secret. Protected by rate limiting instead."""
+    await _insert_and_broadcast(reading, source="browser")
     return {"status": "ok"}
 
 
