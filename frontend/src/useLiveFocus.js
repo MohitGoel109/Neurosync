@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const API_BASE = 'http://localhost:8000'
+import { API_BASE, WS_BASE } from './config'
 const STREAK_THRESHOLD = 70
 
 export function useLiveFocus() {
@@ -37,7 +37,7 @@ export function useLiveFocus() {
     let retryTimer
 
     function connect() {
-      ws = new WebSocket(`ws://localhost:8000/ws/live`)
+      ws = new WebSocket(`${WS_BASE}/ws/live`)
       ws.onopen = () => setConnected(true)
       ws.onclose = () => {
         setConnected(false)

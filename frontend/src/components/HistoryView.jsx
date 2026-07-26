@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import Skeleton from './Skeleton'
 
-const API_BASE = 'http://localhost:8000'
+import { API_BASE } from '../config'
 
 export default function HistoryView() {
   const [daily, setDaily] = useState([])

@@ -16,7 +16,9 @@ from activity_tracker import ActivityTracker
 from window_tracker import WindowTracker
 from focus_score import compute_focus_score
 
-BACKEND_URL = "http://localhost:8000/api/readings"
+import os
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000/api/readings")
+AGENT_API_KEY = os.environ.get("AGENT_API_KEY", "")
 POLL_INTERVAL_SECONDS = 2
 
 
@@ -54,7 +56,8 @@ def main():
             }
 
             try:
-                requests.post(BACKEND_URL, json=payload, timeout=2)
+                headers = {"X-API-Key": AGENT_API_KEY} if AGENT_API_KEY else {}
+                requests.post(BACKEND_URL, json=payload, headers=headers, timeout=2)
             except requests.exceptions.RequestException as e:
                 print(f"[warn] could not reach backend: {e}")
 
