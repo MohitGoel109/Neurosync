@@ -1,11 +1,19 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import Skeleton from './Skeleton'
 
-export default function FocusTimeline({ data = [] }) {
+export default function FocusTimeline({ data = [], loading = false }) {
   return (
     <div className="ns-panel p-4">
       <h3 className="font-mono text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--text-dim)' }}>
         Focus timeline
       </h3>
+      {loading ? (
+        <div className="flex items-end gap-2" style={{ height: 180 }}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Skeleton key={i} width="100%" height={`${30 + ((i * 7) % 5) * 25}px`} />
+          ))}
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height={180}>
         <AreaChart data={data}>
           <defs>
@@ -24,6 +32,7 @@ export default function FocusTimeline({ data = [] }) {
           <Area type="monotone" dataKey="avg_score" stroke="var(--trace)" strokeWidth={2} fill="url(#focusFill)" />
         </AreaChart>
       </ResponsiveContainer>
+      )}
     </div>
   )
 }

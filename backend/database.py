@@ -30,5 +30,8 @@ def init_db():
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp)"
     )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+    )
     conn.commit()
     conn.close()

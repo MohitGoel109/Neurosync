@@ -1,30 +1,37 @@
 import { useEffect, useRef, useState } from 'react'
 
 const API_BASE = 'http://localhost:8000'
+const STREAK_THRESHOLD = 70
 
 export function useLiveFocus() {
   const [focusScore, setFocusScore] = useState(0)
+  const [breakdown, setBreakdown] = useState(null)
   const [alerts, setAlerts] = useState([])
   const [pings, setPings] = useState([])
   const [timeline, setTimeline] = useState([])
+  const [timelineLoading, setTimelineLoading] = useState(true)
   const [connected, setConnected] = useState(false)
+  const [streak, setStreak] = useState(0)
+  const [bestStreak, setBestStreak] = useState(0)
   const distractionStreak = useRef(0)
+  const streakSeconds = useRef(0)
 
   async function refetchTimeline() {
     try {
+      setTimelineLoading(true)
       const r = await fetch(`${API_BASE}/api/stats/hourly`)
       setTimeline(await r.json())
     } catch {
       // backend not reachable yet — leave existing timeline as-is
+    } finally {
+      setTimelineLoading(false)
     }
   }
 
-  // Initial timeline load
   useEffect(() => {
     refetchTimeline()
   }, [])
 
-  // Live WebSocket feed
   useEffect(() => {
     let ws
     let retryTimer
@@ -39,12 +46,29 @@ export function useLiveFocus() {
       ws.onmessage = (event) => {
         const reading = JSON.parse(event.data)
         setFocusScore(reading.focus_score)
+        if (reading.score_components) setBreakdown(reading.score_components)
+
+        // Focus streak: consecutive readings (roughly every agent poll) above threshold
+        if (reading.focus_score >= STREAK_THRESHOLD) {
+          streakSeconds.current += 2 // agent posts ~every 2s
+          setStreak(streakSeconds.current)
+          setBestStreak((b) => Math.max(b, streakSeconds.current))
+        } else {
+          streakSeconds.current = 0
+          setStreak(0)
+        }
 
         if (reading.is_distraction) {
           distractionStreak.current += 1
           setPings((prev) => [
-            { id: Date.now(), angle: Math.random() * 360, opacity: 0.9 },
-            ...prev.slice(0, 5),
+            {
+              id: Date.now(),
+              angle: Math.random() * 360,
+              opacity: 0.9,
+              app: reading.active_app,
+              timestamp: reading.timestamp || new Date().toISOString(),
+            },
+            ...prev.slice(0, 7),
           ])
           if (distractionStreak.current === 3) {
             pushAlert(`Distracted on ${reading.active_app} — consider switching back.`)
@@ -70,9 +94,36 @@ export function useLiveFocus() {
     }
   }, [])
 
-  return { focusScore, alerts, pings, timeline, connected, refetchTimeline }
+  return {
+    focusScore,
+    breakdown,
+    alerts,
+    pings,
+    timeline,
+    timelineLoading,
+    connected,
+    streak,
+    bestStreak,
+    refetchTimeline,
+  }
 }
 
 export async function seedSimulatedData(hours = 3) {
   await fetch(`${API_BASE}/api/simulate/seed?hours=${hours}`, { method: 'POST' })
+}
+
+export async function fetchBlocklist() {
+  const r = await fetch(`${API_BASE}/api/blocklist`)
+  if (!r.ok) throw new Error('failed to load blocklist')
+  return r.json()
+}
+
+export async function saveBlocklist(list) {
+  const r = await fetch(`${API_BASE}/api/blocklist`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocklist: list }),
+  })
+  if (!r.ok) throw new Error('failed to save blocklist')
+  return r.json()
 }

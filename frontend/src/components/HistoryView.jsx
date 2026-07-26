@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import Skeleton from './Skeleton'
 
 const API_BASE = 'http://localhost:8000'
 
@@ -28,8 +29,10 @@ export default function HistoryView() {
           Distraction % — last 7 days
         </h3>
         {loading ? (
-          <div className="h-[200px] flex items-center justify-center font-mono text-xs" style={{ color: 'var(--text-dim)' }}>
-            Loading…
+          <div className="h-[200px] flex items-end gap-3 px-2">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <Skeleton key={i} width="100%" height={`${40 + (i % 4) * 30}px`} />
+            ))}
           </div>
         ) : daily.length === 0 ? (
           <div className="h-[200px] flex items-center justify-center font-mono text-xs" style={{ color: 'var(--text-dim)' }}>
@@ -66,7 +69,12 @@ export default function HistoryView() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {loading && Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`sk-${i}`} className="border-b" style={{ borderColor: 'var(--panel-border)' }}>
+                  <td className="py-2 pr-4" colSpan={5}><Skeleton height="14px" /></td>
+                </tr>
+              ))}
+              {!loading && rows.map((r) => (
                 <tr key={r.id} className="border-b" style={{ borderColor: 'var(--panel-border)' }}>
                   <td className="py-2 pr-4">{r.timestamp?.slice(11, 19)}</td>
                   <td className="py-2 pr-4 truncate max-w-[200px]">{r.active_app}</td>

@@ -6,6 +6,7 @@ and serves aggregated data to the React dashboard.
 from datetime import datetime, timedelta
 from typing import Optional, List
 import random
+import json
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +16,6 @@ from database import init_db, get_connection
 
 app = FastAPI(title="NeuroSync API", version="0.1.0")
 
-# Dashboard runs on a different port during dev — allow local origins only.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -25,10 +25,6 @@ app.add_middleware(
 
 init_db()
 
-# ---------------------------------------------------------------------------
-# Live dashboard subscribers (WebSocket) — pushed to whenever the agent posts
-# a new reading, so the radar sweep / focus ring update without polling.
-# ---------------------------------------------------------------------------
 subscribers: List[WebSocket] = []
 
 
@@ -49,24 +45,25 @@ async def live_feed(websocket: WebSocket):
     subscribers.append(websocket)
     try:
         while True:
-            # Keep the socket open; agent -> backend -> browser is push-only.
             await websocket.receive_text()
     except WebSocketDisconnect:
         subscribers.remove(websocket)
 
 
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
 class Reading(BaseModel):
     timestamp: Optional[str] = None
-    attention: bool  # True = looking at screen
+    attention: bool
     typing_speed_wpm: float = 0.0
     idle_seconds: float = 0.0
     mouse_events: int = 0
     active_app: str = "unknown"
     is_distraction: bool = False
     focus_score: float
+    score_components: Optional[dict] = None
+
+
+class BlocklistPayload(BaseModel):
+    blocklist: List[str]
 
 
 class SessionSummary(BaseModel):
@@ -77,9 +74,6 @@ class SessionSummary(BaseModel):
     total_minutes: float
 
 
-# ---------------------------------------------------------------------------
-# Ingestion — the sensing agent POSTs one reading roughly every few seconds
-# ---------------------------------------------------------------------------
 @app.post("/api/readings")
 async def post_reading(reading: Reading):
     ts = reading.timestamp or datetime.utcnow().isoformat()
@@ -90,13 +84,8 @@ async def post_reading(reading: Reading):
             active_app, is_distraction, focus_score)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            ts,
-            int(reading.attention),
-            reading.typing_speed_wpm,
-            reading.idle_seconds,
-            reading.mouse_events,
-            reading.active_app,
-            int(reading.is_distraction),
+            ts, int(reading.attention), reading.typing_speed_wpm, reading.idle_seconds,
+            reading.mouse_events, reading.active_app, int(reading.is_distraction),
             reading.focus_score,
         ),
     )
@@ -107,16 +96,12 @@ async def post_reading(reading: Reading):
     return {"status": "ok"}
 
 
-# ---------------------------------------------------------------------------
-# Dashboard reads
-# ---------------------------------------------------------------------------
 @app.get("/api/readings/recent")
 def recent_readings(minutes: int = 30):
     since = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
     conn = get_connection()
     rows = conn.execute(
-        "SELECT * FROM readings WHERE timestamp >= ? ORDER BY timestamp ASC",
-        (since,),
+        "SELECT * FROM readings WHERE timestamp >= ? ORDER BY timestamp ASC", (since,)
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -126,9 +111,7 @@ def recent_readings(minutes: int = 30):
 def stats_today():
     since = datetime.utcnow().strftime("%Y-%m-%d")
     conn = get_connection()
-    rows = conn.execute(
-        "SELECT * FROM readings WHERE timestamp >= ?", (since,)
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM readings WHERE timestamp >= ?", (since,)).fetchall()
     conn.close()
 
     if not rows:
@@ -145,7 +128,6 @@ def stats_today():
 
 @app.get("/api/stats/hourly")
 def stats_hourly():
-    """Focus score bucketed by hour, for the timeline chart."""
     conn = get_connection()
     rows = conn.execute(
         """SELECT substr(timestamp, 1, 13) as hour, AVG(focus_score) as avg_score
@@ -155,10 +137,6 @@ def stats_hourly():
     return [dict(r) for r in rows]
 
 
-# ---------------------------------------------------------------------------
-# Demo fallback — generates realistic simulated readings so the dashboard
-# has something impressive to show even if the webcam/demo machine misbehaves.
-# ---------------------------------------------------------------------------
 @app.post("/api/simulate/seed")
 def seed_simulated_data(hours: int = 3):
     conn = get_connection()
@@ -166,7 +144,7 @@ def seed_simulated_data(hours: int = 3):
     apps = ["VS Code", "Docs", "Terminal", "YouTube", "Instagram", "Slack"]
     distracting = {"YouTube", "Instagram"}
 
-    for i in range(hours * 60):  # one reading per simulated minute
+    for i in range(hours * 60):
         ts = (now - timedelta(minutes=hours * 60 - i)).isoformat()
         app_choice = random.choices(apps, weights=[30, 15, 15, 10, 8, 12])[0]
         is_distraction = app_choice in distracting
@@ -179,19 +157,15 @@ def seed_simulated_data(hours: int = 3):
                 active_app, is_distraction, focus_score)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                ts,
-                int(attention),
-                round(random.uniform(20, 70), 1),
-                round(random.uniform(0, 45), 1),
-                random.randint(0, 40),
-                app_choice,
-                int(is_distraction),
-                round(score, 1),
+                ts, int(attention), round(random.uniform(20, 70), 1),
+                round(random.uniform(0, 45), 1), random.randint(0, 40),
+                app_choice, int(is_distraction), round(score, 1),
             ),
         )
     conn.commit()
     conn.close()
     return {"status": "seeded", "readings": hours * 60}
+
 
 @app.get("/api/stats/daily")
 def stats_daily(days: int = 7):
@@ -218,6 +192,37 @@ def readings_table(limit: int = 50):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+DEFAULT_BLOCKLIST = [
+    "youtube", "instagram", "facebook", "tiktok", "twitter", "x.com",
+    "reddit", "netflix", "twitch", "steam", "discord",
+]
+
+
+@app.get("/api/blocklist")
+def get_blocklist():
+    conn = get_connection()
+    row = conn.execute("SELECT value FROM settings WHERE key = 'blocklist'").fetchone()
+    conn.close()
+    if row:
+        return {"blocklist": json.loads(row["value"])}
+    return {"blocklist": DEFAULT_BLOCKLIST}
+
+
+@app.put("/api/blocklist")
+def put_blocklist(payload: BlocklistPayload):
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('blocklist', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (json.dumps(payload.blocklist),),
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "saved", "blocklist": payload.blocklist}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
