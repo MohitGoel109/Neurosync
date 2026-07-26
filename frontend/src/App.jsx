@@ -28,6 +28,12 @@ const NAV = [
   { id: 'settings', label: 'Settings' },
 ]
 
+const ACTIVITY_LABEL = {
+  active: 'Tracking',
+  idle: 'Connected — no data',
+  'no-agent': 'No agent',
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('ns-theme') || 'cognitive-radar')
   const [view, setView] = useState('dashboard')
@@ -36,7 +42,7 @@ export default function App() {
   const [shortcutsHint, setShortcutsHint] = useState(false)
   const {
     focusScore, breakdown, alerts, pings, timeline, timelineLoading,
-    connected, streak, bestStreak, refetchTimeline,
+    connected, activityStatus, streak, bestStreak, refetchTimeline,
   } = useLiveFocus()
 
   useEffect(() => {
@@ -49,7 +55,6 @@ export default function App() {
     return () => clearTimeout(t)
   }, [])
 
-  // Keyboard shortcuts: T cycle theme, D load demo data, 1/2/3 switch view, ? show hint
   useEffect(() => {
     function onKeyDown(e) {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
@@ -161,7 +166,7 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard label="Focus score" value={focusScore} sublabel="live" />
                 <StatCard label="Distraction pings" value={pings.length} sublabel="last few minutes" />
-                <StatCard label="Status" value={connected ? 'Tracking' : 'Idle'} />
+                <StatCard label="Status" value={ACTIVITY_LABEL[activityStatus]} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <SessionTimer />

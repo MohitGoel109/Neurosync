@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { API_BASE, WS_BASE, authHeaders } from './config'
 
-import { API_BASE, WS_BASE } from './config'
 const STREAK_THRESHOLD = 70
+const ACTIVITY_TIMEOUT_MS = 10000 // no reading in 10s = considered idle, not actively tracking
 
 export function useLiveFocus() {
   const [focusScore, setFocusScore] = useState(0)
@@ -11,10 +12,12 @@ export function useLiveFocus() {
   const [timeline, setTimeline] = useState([])
   const [timelineLoading, setTimelineLoading] = useState(true)
   const [connected, setConnected] = useState(false)
+  const [activityStatus, setActivityStatus] = useState('no-agent')
   const [streak, setStreak] = useState(0)
   const [bestStreak, setBestStreak] = useState(0)
   const distractionStreak = useRef(0)
   const streakSeconds = useRef(0)
+  const lastReadingAt = useRef(null)
 
   async function refetchTimeline() {
     try {
@@ -41,16 +44,18 @@ export function useLiveFocus() {
       ws.onopen = () => setConnected(true)
       ws.onclose = () => {
         setConnected(false)
+        setActivityStatus('no-agent')
         retryTimer = setTimeout(connect, 2000)
       }
       ws.onmessage = (event) => {
         const reading = JSON.parse(event.data)
+        lastReadingAt.current = Date.now()
+        setActivityStatus('active')
         setFocusScore(reading.focus_score)
         if (reading.score_components) setBreakdown(reading.score_components)
 
-        // Focus streak: consecutive readings (roughly every agent poll) above threshold
         if (reading.focus_score >= STREAK_THRESHOLD) {
-          streakSeconds.current += 2 // agent posts ~every 2s
+          streakSeconds.current += 2
           setStreak(streakSeconds.current)
           setBestStreak((b) => Math.max(b, streakSeconds.current))
         } else {
@@ -88,9 +93,20 @@ export function useLiveFocus() {
     }
 
     connect()
+
+    const activityCheckInterval = setInterval(() => {
+      if (!lastReadingAt.current) return
+      const sinceLastReading = Date.now() - lastReadingAt.current
+      setActivityStatus((prev) => {
+        if (prev === 'no-agent') return prev
+        return sinceLastReading > ACTIVITY_TIMEOUT_MS ? 'idle' : 'active'
+      })
+    }, 2000)
+
     return () => {
       ws?.close()
       clearTimeout(retryTimer)
+      clearInterval(activityCheckInterval)
     }
   }, [])
 
@@ -102,6 +118,7 @@ export function useLiveFocus() {
     timeline,
     timelineLoading,
     connected,
+    activityStatus,
     streak,
     bestStreak,
     refetchTimeline,
