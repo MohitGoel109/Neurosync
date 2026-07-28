@@ -133,7 +133,16 @@ curl -X POST "http://localhost:8000/api/simulate/seed?hours=3"
 | Frontend | Vercel | https://neurosync-rho.vercel.app |
 
 Notes: Render's free tier has no persistent disk (SQLite resets on restart) and spins down after 15 min idle (~30-50s cold-start on the next request). A `backend/.python-version` file pins Python to `3.11.9`, since Render's default (3.14 at time of writing) lacks prebuilt wheels for `pydantic-core`.
+## Performance (Google PageSpeed Insights)
 
+| Metric | Mobile | Desktop |
+|---|---|---|
+| Performance | 85 | 96 |
+| Accessibility | 85 | 85 |
+| Best Practices | 96 | 96 |
+| SEO | 90 | 90 |
+
+Measured on the deployed frontend (https://neurosync-rho.vercel.app) — a real-world result for a data-visualization-heavy dashboard with live WebSocket updates and multiple animated components, not a static page.
 ## Known limitations (documented honestly)
 
 - **Gaze detection is head-pose + coarse eye direction, not pixel-accurate eye tracking** in either mode. True gaze tracking needs infrared hardware.
