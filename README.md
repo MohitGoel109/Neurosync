@@ -143,6 +143,14 @@ Notes: Render's free tier has no persistent disk (SQLite resets on restart) and 
 | SEO | 90 | 90 |
 
 Measured on the deployed frontend (https://neurosync-rho.vercel.app) — a real-world result for a data-visualization-heavy dashboard with live WebSocket updates and multiple animated components, not a static page.
+
+**Mobile:**
+![PageSpeed Insights mobile results](docs/lighthouse-mobile.png)
+
+**Desktop:**
+![PageSpeed Insights desktop results](docs/lighthouse-desktop.png)
+
+Measured on the deployed frontend (https://neurosync-rho.vercel.app) — a real-world result for a data-visualization-heavy dashboard with live WebSocket updates and multiple animated components, not a static page.
 ## Known limitations (documented honestly)
 
 - **Gaze detection is head-pose + coarse eye direction, not pixel-accurate eye tracking** in either mode. True gaze tracking needs infrared hardware.
