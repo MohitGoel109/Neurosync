@@ -5,8 +5,10 @@ and active-app usage to compute a live **focus score**, surface distraction
 alerts, and visualize productivity trends — an HCI/behavioral-analytics
 approach rather than emotion detection.
 
-**Live:** https://neurosync-rho.vercel.app
+**Live:** https://neurosync-rho.vercel.app 
+
 **API:** https://neurosync-j7m3.onrender.com
+
 **Repo:** https://github.com/MohitGoel109/Neurosync
 
 ## At a glance
