@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { API_BASE, WS_BASE, authHeaders } from './config'
-
+import { API_BASE, WS_BASE } from './config'
 const STREAK_THRESHOLD = 70
 const ACTIVITY_TIMEOUT_MS = 10000 // no reading in 10s = considered idle, not actively tracking
 
